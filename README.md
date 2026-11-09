@@ -1,4 +1,6 @@
 # ztng
+[![CI](https://github.com/private-galaxy/ztng/actions/workflows/ci.yml/badge.svg)](https://github.com/private-galaxy/ztng/actions/workflows/ci.yml)
+
 My tools for the IllustrisTNG simulations.
 
 Documentation: [English](docs/accessdata.md) | [中文](docs/accessdata.zh-CN.md)
