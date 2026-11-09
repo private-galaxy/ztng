@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=77.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ztng"
+version = "0.1.0"
+description = "Tools for the IllustrisTNG simulations."
+authors = [
+    {name = "ZENG Guangquan", email = "guangquan.zeng@outlook.com"}
+]
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Astronomy",
+]
+dependencies = [
+    "numpy",
+    "h5py",
+    "requests",
+    "tenacity",
+    "astropy",
+    "numba",
+    "scipy",
+    "illustris_python",
+    # TODO: one dependency of ztng.classes is not public yet.
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "flake8"]
+
+[project.urls]
+Homepage = "https://github.com/private-galaxy/ztng"
+Repository = "https://github.com/private-galaxy/ztng"
+Issues = "https://github.com/private-galaxy/ztng/issues"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
