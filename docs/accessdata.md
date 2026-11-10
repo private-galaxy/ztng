@@ -1,7 +1,5 @@
 # Data access
 
-**English** | [中文](accessdata.zh-CN.md)
-
 `ztng.accessdata` gives access to the IllustrisTNG data. It tries to read the
 local files of the data release first; when a file is missing, it downloads the
 result from the web-based API and caches it, so that the next query is answered

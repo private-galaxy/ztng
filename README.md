@@ -3,7 +3,10 @@
 
 My tools for the IllustrisTNG simulations.
 
-Documentation: [English](docs/accessdata.md) | [中文](docs/accessdata.zh-CN.md)
+## Documentation
+
+- `accessdata` — [English](docs/accessdata.md)
+- `suppldata` — [English](docs/suppldata.ipynb)
 
 ## Installation
 
