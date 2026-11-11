@@ -11,6 +11,14 @@ import illustris_python as il
 from .utils import getSimBasePath
 
 
+def _checkPartType(partType):
+    """ Raise ValueError for a particle type that illustris_python rejects. """
+    try:
+        il.util.partTypeNum(partType)
+    except Exception as err:
+        raise ValueError(f'unknown partType {partType!r}') from err
+
+
 def getSnapHeader(simName, snapnum):
     """ Get the group catalog header for a snapshot. """
     basePath = getSimBasePath(simName)
@@ -24,7 +32,8 @@ def getSubhaloInfo(simName, snapnum, sfid):
 
 
 def getSubhaloSnap(simName, snapnum, sfid, partType, fields):
-    """ Get the snapshot data of a specific type of particals. """
+    """ Get the snapshot data of a specific type of particles. """
+    _checkPartType(partType)
     basePath = getSimBasePath(simName)
     return il.snapshot.loadSubhalo(basePath, snapnum, sfid, partType, fields)
 
@@ -55,6 +64,7 @@ def getHaloInfo(simName, snapnum, fofid):
 
 
 def getHaloSnap(simName, snapnum, fofid, partType, fields):
-    """ Get the snapshot data of a specific type of particals. """
+    """ Get the snapshot data of a specific type of particles. """
+    _checkPartType(partType)
     basePath = getSimBasePath(simName)
     return il.snapshot.loadHalo(basePath, snapnum, fofid, partType, fields)

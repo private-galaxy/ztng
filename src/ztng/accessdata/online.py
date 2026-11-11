@@ -377,6 +377,10 @@ def getSubhaloTree(simName, snapnum, sfid, treeType):
 
     if not os.path.exists(filename):
         detail = getSubhaloDetail(simName, snapnum, sfid)
+        if treeType not in detail['trees']:
+            raise ValueError(
+                f'treeType {treeType!r} is not available; '
+                f'allowed: {sorted(detail["trees"])}')
         treeUrl = detail['trees'][treeType]
         if '.json' in treeUrl:
             _saveNpy(filename, get(treeUrl))

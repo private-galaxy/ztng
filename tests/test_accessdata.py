@@ -23,7 +23,7 @@ from tenacity import wait_none
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from ztng.accessdata import online, utils  # noqa: E402
+from ztng.accessdata import local, online, utils  # noqa: E402
 
 
 def _blocked(*args, **kwargs):
@@ -172,6 +172,21 @@ def test_allowed_partType():
             raise AssertionError(f'{partType!r} should raise ValueError')
 
 
+def test_local_partType_is_checked():
+    """ The local reader accepts every type illustris_python knows. """
+    for partType in ['gas', 'dm', 'tracers', 'stars', 'wind', 'bhs', 4,
+                     'Stars']:
+        local._checkPartType(partType)
+
+    for partType in ['foo', '', None, 'all']:
+        try:
+            local._checkPartType(partType)
+        except ValueError as err:
+            assert repr(partType) in str(err), str(err)
+        else:
+            raise AssertionError(f'{partType!r} should raise ValueError')
+
+
 def test_partStandardName():
     """ Particle types map to their HDF5 group names. """
     cases = {'gas': 'PartType0', 'dm': 'PartType1', 'tracer': 'PartType3',
@@ -256,6 +271,16 @@ def test_tree_is_cached():
         assert online.getSubhaloTree(
             'TNG100-1', 99, 7, 'sublink_simple') == payload
         assert len(calls) == numberOfCalls, calls
+
+    # an unknown tree type names itself instead of raising KeyError
+    with isolated():
+        online.get = fakeGet
+        try:
+            online.getSubhaloTree('TNG100-1', 99, 7, 'bogus')
+        except ValueError as err:
+            assert 'bogus' in str(err), str(err)
+        else:
+            raise AssertionError('an unknown treeType should raise ValueError')
 
 
 def test_retry_policy():
