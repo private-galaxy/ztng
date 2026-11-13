@@ -20,6 +20,7 @@ from astropy.cosmology import FlatLambdaCDM
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from ztng.classes import group as groupModule  # noqa: E402
+from ztng.classes import halo as haloModule  # noqa: E402
 from ztng.classes.group import Group  # noqa: E402
 
 # getStarsBornAtSnapshot() reads the lookback time through the module-level
@@ -71,6 +72,15 @@ class fakeGroup(Group):
         if 'GFM_Metals' in fields:
             data['GFM_Metals'] = np.zeros((4, 11))
         return data
+
+
+class fakeHalo(haloModule.Halo):
+    """ A halo object with no data: only the radius checks run. """
+
+    def __init__(self):
+        self.simName = 'fake'
+        self.snapnum = 99
+        self.fofid = 0
 
 
 class spinningGroup(fakeGroup):
@@ -439,6 +449,16 @@ def test_parts_mass_is_zero_for_an_empty_selection():
     assert group.getPartsMass('stars', within_ckpch=1e-6) == 0.
 
 
+def test_the_baryon_mass_counts_the_three_baryonic_types():
+    """Baryons are the gas, the stars with their wind, and the black holes."""
+    group = fakeGroup()
+    # The fake serves four cells of 0.25 in each type: 1.0 + 1.0 + 1.0.
+    assert np.isclose(group.getBaryonMass(), 3.0), group.getBaryonMass()
+    # Two of the four particles lie within 1.5, in each of the three types.
+    assert np.isclose(group.getBaryonMass(within_ckpch=1.5), 1.5), \
+        group.getBaryonMass(within_ckpch=1.5)
+
+
 def test_a_named_radius_needs_its_base():
     """A named radius without the radius it refers to is an error."""
     group = fakeGroup()
@@ -449,6 +469,20 @@ def test_a_named_radius_needs_its_base():
             assert name in str(err)
         else:
             raise AssertionError(f'within_ckpch={name!r} did not raise')
+
+
+def test_a_halo_has_no_stellar_half_mass_radius():
+    """Re is the half-mass radius of a subhalo, so a halo refuses it."""
+    halo = fakeHalo()
+    for kwargs in ({'within_ckpch': 'Re'}, {'within_ckpch': '2Re'},
+                   {'within_ckpch': '10Re'}, {'Re_ckpch': 30.},
+                   {'within_ckpch': '2Re', 'Re_ckpch': 30.}):
+        try:
+            halo.getParts('stars', **kwargs)
+        except ValueError as err:
+            assert 'half-mass' in str(err), (kwargs, err)
+        else:
+            raise AssertionError(f'{kwargs} did not raise')
 
 
 def test_a_named_radius_needs_a_positive_base():

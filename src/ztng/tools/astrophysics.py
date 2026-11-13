@@ -1,6 +1,7 @@
-"""Astrophysical conversions: magnitude, luminosity, cooling."""
+"""Astrophysical conversions: magnitude, luminosity, cooling, energy."""
 
 import numpy as np
+from numba import njit, prange
 from astropy import constants as const
 from astropy import units
 
@@ -35,6 +36,64 @@ def absoluteMagnitudeToLuminosity(magnitude, band):
     # the solar luminosity in this band [W]
     sun = 10.**((m_sun - M_BOL_SUN) / -2.5) * width * L_SUN_IN_W
     return 10.**((np.asanyarray(magnitude) - m_sun) / -2.5) * sun * units.W
+
+
+# const.G in kpc^3/(Msun s^2): the unit system of the two functions below,
+# which read the masses as Msun and the positions as kpc
+_G_IN_KPC_MSUN = const.G.to_value(  # pyright: ignore
+    units.kpc**3 / (units.M_sun * units.s**2))
+_ENERGY_UNIT = units.M_sun * units.kpc**2 / units.s**2
+
+
+@njit
+def _getIthPartGravitationalEnergy(masses, re_coor, i, softening):
+    """Return -sum_j m_j/r_ij, the kernel of the energy of the i-th one."""
+    total = 0.
+    for j in range(len(masses)):
+        if j != i:
+            dx = re_coor[i, 0] - re_coor[j, 0]
+            dy = re_coor[i, 1] - re_coor[j, 1]
+            dz = re_coor[i, 2] - re_coor[j, 2]
+            total -= masses[j] / ((dx**2. + dy**2. + dz**2.)**0.5 + softening)
+    return total
+
+
+@njit(parallel=True)
+def _getPartsGravitationalEnergy(masses, re_coor, softening):
+    """Return the kernel of every particle."""
+    energy = np.empty(len(masses), dtype=np.float64)
+    for i in prange(len(masses)):
+        energy[i] = _getIthPartGravitationalEnergy(
+            masses, re_coor, i, softening)
+    return energy
+
+
+def getPartsGravitationalEnergy(masses, re_coor, softening=1e-12):
+    """Return the gravitational energy of every particle.
+
+    U_i = -G m_i sum_{j != i} m_j / r_ij, in Msun kpc^2/s^2, with the masses
+    and the relative positions read as Msun and kpc. Every pair appears once
+    from each end, so the sum over i is twice the total energy of the system.
+    The softening is added to every separation, so that r never vanishes.
+    """
+    masses = np.asarray(
+        units.Quantity(masses, units.M_sun).to_value(units.M_sun),
+        dtype=np.float64)
+    re_coor = np.asarray(
+        units.Quantity(re_coor, units.kpc).to_value(units.kpc),
+        dtype=np.float64)
+    kernel = _getPartsGravitationalEnergy(masses, re_coor, softening)
+    return _G_IN_KPC_MSUN * masses * kernel * _ENERGY_UNIT
+
+
+def getGravitationalEnergy(masses, re_coor, softening=1e-12):
+    """Return the total gravitational energy of a system of particles.
+
+    U = -G sum_{i < j} m_i m_j / r_ij = (1/2) sum_i U_i, in Msun kpc^2/s^2:
+    the 1/2 cancels the double counting of the double sum behind U_i.
+    """
+    energy = getPartsGravitationalEnergy(masses, re_coor, softening)
+    return 0.5 * np.sum(energy)
 
 
 # the recipes that getCoolingTime() knows

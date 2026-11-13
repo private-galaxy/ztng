@@ -434,9 +434,19 @@ class Group:
         return mass
 
     def getBaryonMass(self, within_ckpch=np.inf):
-        """ Get the total mass of baryon (i.e. stars and gas). """
-        return (self.getPartsMass('gas', within_ckpch=within_ckpch)
-                + self.getPartsMass('stars', within_ckpch=within_ckpch))
+        """ Get the total mass of baryon (i.e. gas, stars and black holes).
+
+        Notes
+        -----
+        The stars include the wind-phase gas, which TNG counts as gas in its
+        mass tables: gas + stars here is GroupMassType[0] + GroupMassType[4],
+        and the black holes add GroupMassType[5].
+        """
+        return (self.getPartsMass('gas', onlySFingGas=False,
+                                  within_ckpch=within_ckpch)
+                + self.getPartsMass('stars', onlyRealStars=False,
+                                    within_ckpch=within_ckpch)
+                + self.getPartsMass('bh', within_ckpch=within_ckpch))
 
     def getPartsContainCertainMassFracRadius(
             self, partType, target_mass_frac, **kwargs):

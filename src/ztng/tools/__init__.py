@@ -4,7 +4,7 @@
     statistics      radii that contain a value or a fraction of it
     coords          positions under the periodic boundary conditions
     parallel        run one function over many inputs
-    astrophysics    magnitude, luminosity and cooling time
+    astrophysics    magnitude, luminosity, cooling time and gravity
     arguments       check the keyword arguments of a function
     units           units of the TNG data
 """
@@ -13,6 +13,8 @@ from .arguments import updateKwargs
 from .astrophysics import COOLING_TIME_CONVENTIONS
 from .astrophysics import absoluteMagnitudeToLuminosity
 from .astrophysics import getCoolingTime
+from .astrophysics import getGravitationalEnergy
+from .astrophysics import getPartsGravitationalEnergy
 from .astrophysics import internalEnergyToTemperature
 from .coords import (
     processingPbcCoord,
@@ -49,6 +51,8 @@ __all__ = [
     'getContainCertainValueRadius',
     'getCoolingTime',
     'getEnclosedMass',
+    'getGravitationalEnergy',
+    'getPartsGravitationalEnergy',
     'getRotationTransformationMatrix',
     'haloVelocityUnit',
     'internalEnergyToTemperature',

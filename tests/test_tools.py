@@ -483,6 +483,48 @@ def test_enclosed_mass_matches_a_loop():
         np.array([0.]), all_re_dist, all_masses)[0] == 0.
 
 
+def test_gravitational_energy_of_a_pair():
+    """Two particles hold U = -G m1 m2 / r, counted from both ends."""
+    masses = np.array([1e10, 3e10]) * units.M_sun
+    re_coor = np.array([[0., 0., 0.], [0., 0., 10.]]) * units.kpc
+    expected = -const.G * masses[0] * masses[1] / (10. * units.kpc)
+    energy = tools.getPartsGravitationalEnergy(masses, re_coor)
+    # Each particle holds the whole pair energy.
+    assert np.allclose(energy.to_value(expected.unit),
+                       expected.to_value(expected.unit), rtol=1e-12)
+    # Half the sum is that same energy, not twice it.
+    total = tools.getGravitationalEnergy(masses, re_coor)
+    assert np.isclose(total.to_value(expected.unit),
+                      expected.to_value(expected.unit), rtol=1e-12)
+    # Plain arrays are read as Msun and kpc.
+    plain = tools.getPartsGravitationalEnergy(
+        [1e10, 3e10], [[0., 0., 0.], [0., 0., 10.]])
+    assert np.allclose(plain.value, energy.value, rtol=1e-12)
+
+
+def test_gravitational_energy_matches_a_loop():
+    """Every value is the energy of one particle in the field of the rest."""
+    rng = np.random.default_rng(7)
+    masses = rng.uniform(1e8, 1e10, 6) * units.M_sun
+    re_coor = rng.uniform(-10., 10., (6, 3)) * units.kpc
+    got = tools.getPartsGravitationalEnergy(masses, re_coor)
+    want = np.zeros(6)
+    for i in range(6):
+        for j in range(6):
+            if i != j:
+                distance = np.linalg.norm(re_coor[i] - re_coor[j])
+                want[i] -= (const.G * masses[i] * masses[j]
+                            / distance).to_value(got.unit)
+    assert np.allclose(got.value, want, rtol=1e-12), (got.value, want)
+    # Every pair sits at both ends of the sum, so half of it is the total.
+    total = tools.getGravitationalEnergy(masses, re_coor)
+    assert np.isclose(total.value, 0.5 * got.value.sum(), rtol=1e-12)
+    # A particle on its own has nobody to attract.
+    alone = tools.getGravitationalEnergy([1e10] * units.M_sun,
+                                         [[1., 2., 3.]] * units.kpc)
+    assert alone.value == 0., alone
+
+
 def test_cooling_time_follows_both_recipes():
     """The two recipes differ by the density product that pairs with Lambda."""
     from astropy import units
