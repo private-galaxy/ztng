@@ -161,6 +161,20 @@ def allowed_partType(partType):
     return _ALLOWED_PART_TYPES[ptNum]
 
 
+# every TNG run stores 100 snapshots, numbered from 0 to 99
+MIN_SNAPNUM = 0
+MAX_SNAPNUM = 99
+
+# the snapshots that TNG stores with the full set of particle data
+FULL_SNAPSHOTS = (2, 3, 4, 6, 8, 11, 13, 17, 21, 25,
+                  33, 40, 50, 59, 67, 72, 78, 84, 91, 99)
+
+
+def inFullSnap(snapnum):
+    """ Whether TNG stores the full set of particle data in this snapshot. """
+    return snapnum in FULL_SNAPSHOTS
+
+
 _SAVED_FILE_PATTERNS = {
     'simulation_metadata': '{simName}_simulation_metadata.npy',
     'snapshot_metadata': '{simName}_snapshot_metadata_{snapnum:02d}.npy',

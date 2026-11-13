@@ -283,22 +283,29 @@ def test_contain_fraction_radius_grows_with_the_fraction():
 
 
 def test_absolute_magnitude_to_luminosity():
-    """A fainter magnitude gives a lower luminosity."""
-    sun = tools.absoluteMagnitudeToLuminosity(np.array(4.83))
-    assert np.isclose(sun, const.L_sun.to(units.W).value)
-    bright = tools.absoluteMagnitudeToLuminosity(np.array(0.))
-    faint = tools.absoluteMagnitudeToLuminosity(np.array(10.))
-    assert bright > faint
+    """Each band has its own solar magnitude; the result is in watts."""
+    table = tools.astrophysics._SUN_ABSOLUTE_MAGNITUDE
+    for band, (m_sun, band_width) in table.items():
+        luminosity = tools.absoluteMagnitudeToLuminosity(
+            np.array([m_sun]), band)
+        assert luminosity.unit == units.W
+        expected = (10.**((m_sun - tools.astrophysics.M_BOL_SUN) / -2.5)
+                    * band_width * const.L_sun.to_value(units.W))
+        assert np.isclose(luminosity.to_value(units.W)[0], expected)
     # Five magnitudes are a factor of 100 in luminosity.
-    zero = tools.absoluteMagnitudeToLuminosity(np.array(0.))
-    five = tools.absoluteMagnitudeToLuminosity(np.array(5.))
-    assert np.isclose(zero / five, 100.)
-    # The conversion round-trips with the magnitude formula.
-    magnitudes = np.array([-2., 0., 4.83, 10., 20.])
-    luminosities = tools.absoluteMagnitudeToLuminosity(magnitudes)
-    back = 4.83 - 2.5 * np.log10(luminosities / const.L_sun.to(units.W).value)
-    assert np.allclose(back, magnitudes)
-    assert np.all(luminosities > 0.)
+    zero = tools.absoluteMagnitudeToLuminosity(np.array([0.]), 'V')
+    five = tools.absoluteMagnitudeToLuminosity(np.array([5.]), 'V')
+    assert np.isclose((zero / five).to_value(units.one)[0], 100.)
+    # A fainter magnitude gives a lower luminosity.
+    faint = tools.absoluteMagnitudeToLuminosity(np.array([10.]), 'V')
+    assert zero.to_value(units.W)[0] > faint.to_value(units.W)[0]
+    # A band that does not exist is an error, not a silent zero.
+    try:
+        tools.absoluteMagnitudeToLuminosity(np.array([0.]), 'X')
+    except KeyError:
+        pass
+    else:
+        raise AssertionError('an unknown band should raise KeyError')
 
 
 def test_pbc_relative_coord():
@@ -335,6 +342,41 @@ def test_pbc_relative_coord():
     once = tools.processingPbcRelativeCoord(np.array([[1., -2., 3.]]), 10.)
     twice = tools.processingPbcRelativeCoord(once, 10.)
     assert np.allclose(once, twice)
+
+
+def test_pbc_relative_dist():
+    """The distance from the center uses the nearest image."""
+    coordinates = np.array([[0.1, 0., 0.], [9.9, 0., 0.], [5., 12., 0.]])
+    center = np.array([0., 0., 0.])
+    dist = tools.processingPbcRelativeDist(coordinates, center, 10.)
+    assert np.allclose(dist, [0.1, 0.1, np.sqrt(29.)]), dist
+    # A box length that is not finite means no wrapping.
+    dist = tools.processingPbcRelativeDist(coordinates, center, np.inf)
+    assert np.allclose(dist, [0.1, 9.9, 13.]), dist
+    # A Quantity stays a Quantity.
+    quantity = coordinates * units.kpc
+    dist = tools.processingPbcRelativeDist(quantity, center * units.kpc, 10.)
+    assert dist.unit == units.kpc
+    assert np.allclose(dist.value, [0.1, 0.1, np.sqrt(29.)]), dist
+
+
+def test_tng_units():
+    """The units of the TNG data, with the scale factor at the snapshot."""
+    hubble_constant = 0.7
+    scale_factor = 0.5
+    mass = tools.massUnit(hubble_constant)
+    assert np.isclose(mass.to_value(units.Msun), 1e10 / hubble_constant)
+    length = tools.lengthUnit(hubble_constant, scale_factor)
+    assert np.isclose(length.to_value(units.kpc),
+                      scale_factor / hubble_constant)
+    # particle Velocities: sqrt(a) v; GroupVel: v/a; SubhaloVel: v
+    speed = units.km / units.s
+    assert np.isclose(
+        tools.particleVelocityUnit(scale_factor).to_value(speed),
+        np.sqrt(scale_factor))
+    assert tools.subhaloVelocityUnit() == speed
+    assert np.isclose(tools.haloVelocityUnit(scale_factor).to_value(speed),
+                      1. / scale_factor)
 
 
 def test_pbc_coor():
@@ -399,6 +441,92 @@ def test_pbc_radius_is_frame_independent():
     assert np.isclose(radii[0], radii[1], rtol=1e-12)
 
 
+def test_contain_certain_radius_rejects_a_bad_target():
+    """A target that cannot be reached comes back as NaN, not as a crash."""
+    re_dist = np.array([1., 2., 3., 4., 5.])
+    values = np.ones(5)
+    for target in (6., np.nan, np.inf, -np.inf):
+        got = tools.getContainCertainValueRadius(re_dist, values, target)
+        assert np.isnan(got), (target, got)
+    # A reachable target still gives the radius of the first particle that
+    # brings the cumulative value up to it.
+    assert tools.getContainCertainValueRadius(re_dist, values, 2.5) == 3.
+    # A target of zero, and a negative one, are no radius at all.
+    assert tools.getContainCertainValueRadius(re_dist, values, 0.) == 0.
+    assert np.isnan(
+        tools.getContainCertainValueRadius(re_dist, values, -1.))
+    # A target that equals the total must not fall past the last particle:
+    # on float32 data np.sum() can exceed np.cumsum() in the last bits, which
+    # used to put the index one past the end.
+    many = np.full(1000, 0.1, dtype=np.float32)
+    assert np.sum(many) > np.cumsum(many)[-1]
+    assert tools.getContainCertainFractionRadius(
+        np.arange(1000.), many, 1.) == 999.
+
+
+def test_enclosed_mass_matches_a_loop():
+    """The enclosed mass agrees with a particle by particle count."""
+    rng = np.random.default_rng(4)
+    all_re_dist = rng.random(40) * 100.
+    all_masses = rng.random(40)
+    parts_re_dist = rng.random(7) * 100.
+    got = tools.getEnclosedMass(parts_re_dist, all_re_dist, all_masses)
+    want = [np.sum(all_masses[all_re_dist < radius])
+            for radius in parts_re_dist]
+    assert np.allclose(got, want), (got, want)
+    # The comparison is strict: a particle on the radius is not inside it.
+    on_the_edge = tools.getEnclosedMass(np.array([5.]), np.array([5.]),
+                                        np.array([1.]))
+    assert on_the_edge[0] == 0., on_the_edge
+    # A distance that no particle reaches encloses nothing.
+    assert tools.getEnclosedMass(
+        np.array([0.]), all_re_dist, all_masses)[0] == 0.
+
+
+def test_cooling_time_follows_both_recipes():
+    """The two recipes differ by the density product that pairs with Lambda."""
+    from astropy import units
+    energy = np.array([1.]) * (units.km / units.s)**2
+    density = np.array([1e-27]) * units.g / units.cm**3
+    rate = np.array([-1e-23]) * units.erg * units.cm**3 / units.s
+    zinger = tools.getCoolingTime(energy, density, rate)
+    nelson = tools.getCoolingTime(energy, density, rate, convention='nelson')
+    # U/(n_i n_e Lambda) against the n_H^2 recipe, with X_H = 0.76
+    assert np.isclose(nelson[0].value / zinger[0].value,
+                      1. / (1.37 * 0.76**2)), (zinger, nelson)
+    assert zinger[0].value > 0., zinger
+    # A cell with net heating, or no cooling at all, has no cooling time.
+    heating = tools.getCoolingTime(energy, density, -1. * rate)
+    assert np.isnan(heating[0]), heating
+    none = tools.getCoolingTime(energy, density, 0. * rate)
+    assert np.isnan(none[0]), none
+    try:
+        tools.getCoolingTime(energy, density, rate, convention='nh2')
+    except ValueError as err:
+        assert 'zinger20' in str(err), err
+    else:
+        raise AssertionError('an unknown recipe did not raise')
+
+
+def test_internal_energy_to_temperature():
+    """The temperature follows the formula of the TNG FAQ."""
+    # u = 1 (km/s)^2 and x_e = 1.16 give mu = 0.58768 and T = 47.46 K
+    got = tools.internalEnergyToTemperature(np.array([1.]), 1.16)
+    assert np.isclose(got[0], 47.4641, rtol=1e-4), got
+    # the temperature follows the internal energy one for one
+    twice = tools.internalEnergyToTemperature(np.array([2.]), 1.16)
+    assert np.isclose(twice[0], 2. * got[0], rtol=1e-12), twice
+    # a neutral gas has a heavier particle, so a higher temperature: the
+    # ratio is the one of mu = 4 / (1 + 3 X_H + 4 X_H x_e)
+    neutral = tools.internalEnergyToTemperature(np.array([1.]), 0.)
+    assert np.isclose(neutral[0] / got[0],
+                      (1 + 3 * .76 + 4 * .76 * 1.16) / (1 + 3 * .76)), neutral
+    # the result is float64 even for float32 input
+    single = tools.internalEnergyToTemperature(
+        np.array([1.], dtype=np.float32), 1.16)
+    assert single.dtype == np.float64, single.dtype
+
+
 def test_parallel_function():
     """Inputs are passed as tuples or as single values, in order."""
     # An input tuple is unpacked into the positional arguments.
@@ -433,6 +561,24 @@ def test_parallel_function():
         assert 'NoneType' in str(error)
     else:
         raise AssertionError('The TypeError should reach the caller')
+
+
+def test_update_kwargs():
+    """Defaults are merged with the input, and unknown keys are named."""
+    defaults = {'a': 1, 'b': 2, 'c': 3}
+    merged = tools.updateKwargs(defaults, {'b': 20})
+    assert merged == {'a': 1, 'b': 20, 'c': 3}
+    # The default dict itself is left alone.
+    assert defaults == {'a': 1, 'b': 2, 'c': 3}
+    # No input keys gives the defaults back.
+    assert tools.updateKwargs({'a': 1}, {}) == {'a': 1}
+    # An unknown key raises, and the message names the key.
+    try:
+        tools.updateKwargs({'a': 1}, {'b': 2})
+    except TypeError as error:
+        assert "['b']" in str(error)
+    else:
+        raise AssertionError('An unknown key should reach the caller')
 
 
 if __name__ == '__main__':

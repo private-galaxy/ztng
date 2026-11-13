@@ -12,6 +12,7 @@ from ..tools import (
     getContainCertainFractionRadius,
     getContainCertainValueRadius,
     getRotationTransformationMatrix,
+    processingPbcRelativeCoord,
 )
 
 G = const.G  # pyright: ignore
@@ -21,7 +22,7 @@ class Particles:
 
     def __init__(self, masses, coordinates, velocities,
                  center_position=None, center_velocity=None,
-                 enclosed_mass=None):
+                 enclosed_mass=None, box_length=None):
         masses = np.asanyarray(masses)
         coordinates = np.asanyarray(coordinates)
         velocities = np.asanyarray(velocities)
@@ -46,10 +47,19 @@ class Particles:
                 velocities, axis=0, weights=masses)
         else:
             self.center_velocity = center_velocity
-        # Here the relative position and velocity are plain differences.
-        # If the particle system straddles the edge of the simulation box,
-        # wrap the coordinates first, e.g. with processingPbcCoord.
+        # The relative velocity is a plain difference. The relative position
+        # is too, unless a box length is given: then the minimum image
+        # convention keeps the members of a system that straddles the edge of
+        # the box at their true distance from the center.
+        if box_length is None:
+            warnings.warn(
+                'box_length is missing: the distance from the center is a '
+                'plain difference, which is wrong for a system across the '
+                'box edge. Pass the box length, or np.inf if the system does '
+                'not cross the edge of the box.', stacklevel=2)
         self.re_coor = self.coordinates - self.center_position
+        if box_length is not None:
+            self.re_coor = processingPbcRelativeCoord(self.re_coor, box_length)
         self.re_vel = self.velocities - self.center_velocity
         self.re_dist = np.linalg.norm(self.re_coor, axis=1)
         # The mass enclosed within the radius of every particle, M(<r).
@@ -58,6 +68,8 @@ class Particles:
         # only still needs the gas and the dark matter inside each
         # stellar radius.
         self.enclosed_mass = enclosed_mass
+        # the particle IDs, filled in when needed
+        self.ids = None
 
     def getContainCertainMassRadius(self, target_mass):
         """Get the radius that contains a given mass."""

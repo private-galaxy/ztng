@@ -187,6 +187,18 @@ def test_local_partType_is_checked():
             raise AssertionError(f'{partType!r} should raise ValueError')
 
 
+def test_full_snapshots():
+    """ The table lists the 20 TNG snapshots that hold every particle. """
+    snaps = utils.FULL_SNAPSHOTS
+    assert len(snaps) == 20, f'{len(snaps)} snapshots'
+    assert list(snaps) == sorted(set(snaps)), 'not unique or not ascending'
+    assert snaps[0] >= 0 and snaps[-1] == 99, (snaps[0], snaps[-1])
+    for snapnum in snaps:
+        assert utils.inFullSnap(snapnum), snapnum
+    for snapnum in [0, 1, 5, 98, 100, -1]:
+        assert not utils.inFullSnap(snapnum), snapnum
+
+
 def test_partStandardName():
     """ Particle types map to their HDF5 group names. """
     cases = {'gas': 'PartType0', 'dm': 'PartType1', 'tracer': 'PartType3',
